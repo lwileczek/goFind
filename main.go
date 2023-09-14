@@ -35,76 +35,74 @@ func main() {
 		*dir = string((*dir)[0 : len(*dir)-1])
 	}
 
-	var wg sync.WaitGroup
-
-	done := make(chan bool)
 	printCh := make(chan string, 2**jobs)
-	go printResults(printCh, done)
+	workQ := make(chan string, 4**jobs)
+	dirCount := make(chan int, *jobs)
+	//Track how many dirs are open and close the work queue when we hit zero
+	go dirChecker(dirCount, workQ)
+	defer close(dirCount)
+	go createWorkerPool(pattern, workQ, printCh, dirCount, jobs)
 
-	//TODO: This is repeated in the function below except I allow the creation
-	//of go routines. Repeated code is bad!
-	items, err := os.ReadDir(*dir)
-	if err != nil {
-		panic(err)
-	}
-InitialItemSearch:
-	for _, item := range items {
-		subPath := fmt.Sprintf("%s/%s", *dir, item.Name())
-		//Starting from the initial directory, create a new goroutine for each subdirectory
-		//but no more, if there is one directory, use one goroutine
-		if item.IsDir() {
-			for _, p := range IGNORE_PATHS {
-				if p == item.Name() {
-					continue InitialItemSearch
-				}
-			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				recursiveSearch(subPath, pattern, printCh)
-			}()
-		} else {
-			if strings.Index(item.Name(), *pattern) >=0 {
-				printCh<- subPath
-			}
-		}
-	}
-
-	wg.Wait()
-	close(printCh)
-	<-done
-}
-
-func recursiveSearch(path string, pattern *string, out chan string) {
-	items, err := os.ReadDir(path)
-	if err != nil {
-		fmt.Println("Error reading the directory", path)
-		fmt.Println(err)
-	}
-ItemSearch:
-	for _, item := range items {
-		if item.IsDir() {
-			//Don't dive into directories I don't care about
-			for _, p := range IGNORE_PATHS {
-				if p == item.Name() {
-					continue ItemSearch
-				}
-			}
-			subPath := fmt.Sprintf("%s/%s", path, item.Name())
-			recursiveSearch(subPath, pattern, out)
-		} else {
-			if strings.Index(item.Name(), *pattern) >=0 {
-				//subPath is repeated but no point in creating an allocation if not required
-				subPath := fmt.Sprintf("%s/%s", path, item.Name())
-				out <- subPath
-			}
-		}
-	}
-}
-
-func printResults(in chan string, done chan bool) {
-	for item := range in {
+    //Send first work request
+    workQ <- *dir
+    
+	//Print all results
+	for item := range printCh {
 		fmt.Println(item)
 	}
-	done <- true
+}
+
+func dirChecker(in chan int, fin chan string) {
+	n := 1
+	for i := range in {
+		n += i
+		if n <= 0 {
+			close(fin)
+			return
+		}
+	}
+}
+
+func createWorkerPool(p *string, in chan string, out chan string, cnt chan int, w *int) {
+	var wg sync.WaitGroup
+	for i := 0; i < *w; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			search(p, in, out, cnt)
+		}()
+	}
+	wg.Wait()
+	close(out)
+}
+func search(pattern *string, in chan string, out chan string, cnt chan int) {
+	for path := range in {
+		items, err := os.ReadDir(path)
+		if err != nil {
+			fmt.Println("Error reading the directory", path)
+			fmt.Println(err)
+			cnt <- -1
+		}
+	ItemSearch:
+		for _, item := range items {
+			if item.IsDir() {
+				//Don't dive into directories I don't care about
+				for _, p := range IGNORE_PATHS {
+					if p == item.Name() {
+						continue ItemSearch
+					}
+				}
+				cnt <- 1
+				in <- fmt.Sprintf("%s/%s", path, item.Name())
+			} else {
+				if strings.Index(item.Name(), *pattern) >= 0 {
+					//subPath is repeated but no point in creating an allocation if not required
+					subPath := fmt.Sprintf("%s/%s", path, item.Name())
+					out <- subPath
+				}
+			}
+		}
+		//We finished reading everything in the dir, tell the accounted we finished
+		cnt <- -1
+	}
 }
