@@ -16,14 +16,16 @@ If you're looking for something specific you can limit the number of responses
 > Does not work on windows and I'm not trying too support this
 
 ## TODO
- - sub command to print paths that are ignored
- - create case sensative/insensative searching
- - add the ability exclude additional directories or patters
- - add the ability to include specific patterns in the search path
- - switch to ignore hidden files/directories
+ - [ ] user cobra for for a better cli experience
+ - [ ] sub command to print paths that are ignored
+ - [ ] create case sensative/insensative searching
+ - [ ] exclude additional directories or patters
+ - [ ] include specific patterns in the search path
+ - [ ] switch to ignore all hidden files/directories
  - [x] can we create a worker pool instead of the number of initial directories
  - [x] cap the number of returned responses, say 1 (quit after the first match!)
- - cap the depth of the search
+ - [ ] cap the depth of the search
+ - [ ] use select statement with a fallback queue to prevent deadlock from happening
 
 ## Using
 ### Build
