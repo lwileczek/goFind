@@ -129,19 +129,17 @@ func handleFailover(work, fail chan string) {
 		task := <-fail
 		q = append(q, task)
 		//TODO: Add verbose logging here so users can check if the failover was used
-	Inner:
 		for {
 			select {
 			case work <- q[0]:
 				q = q[1:]
 			case task := <-fail:
 				q = append(q, task)
-				//TODO: Add verbose logging here so users can check if the failover was used
 			default:
-				//I don't know if we'll get an issue with `work <- q[0]` unless we have this
-				if len(q) == 0 {
-					break Inner
-				}
+			}
+			//I don't know if we'll get an issue with `work <- q[0]` unless we have this
+			if len(q) == 0 {
+				break
 			}
 		}
 	}
