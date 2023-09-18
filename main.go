@@ -45,11 +45,16 @@ func main() {
 	printCh := make(chan string, *workers)
 	//The system will reach deadlock if the work queue reaches capacity
 	workQ := make(chan string, *queueSize)
+	//To avoid deadlock, send tasks here which will have a non-blocky retry
+	//func to add tasks back to workQ
+	failover := make(chan string)
 	dirCount := make(chan int)
 	//Track how many dirs are open and close the work queue when we hit zero
 	go dirChecker(dirCount, workQ)
 	defer close(dirCount)
-	go createWorkerPool(pattern, workQ, printCh, dirCount, workers)
+	defer close(failover)
+	go handleFailover(workQ, failover)
+	go createWorkerPool(pattern, workQ, failover, printCh, dirCount, workers)
 
 	//Send first work request
 	workQ <- *dir
@@ -86,19 +91,19 @@ func dirChecker(in chan int, work chan string) {
 	}
 }
 
-func createWorkerPool(p *string, in chan string, results chan string, cnt chan int, w *int) {
+func createWorkerPool(p *string, in chan string, failover chan string, results chan string, cnt chan int, w *int) {
 	var wg sync.WaitGroup
 	for i := 0; i < *w; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			search(p, in, results, cnt)
+			search(p, in, failover, results, cnt)
 		}()
 	}
 	wg.Wait()
 	close(results)
 }
-func search(pattern *string, in chan string, out chan string, cnt chan int) {
+func search(pattern *string, in chan string, failover chan string, out chan string, cnt chan int) {
 	for path := range in {
 		items, err := os.ReadDir(path)
 		if err != nil {
@@ -117,7 +122,10 @@ func search(pattern *string, in chan string, out chan string, cnt chan int) {
 				}
 				subPath := fmt.Sprintf("%s/%s", path, item.Name())
 				cnt <- 1
-				in <- subPath
+				select {
+				case in <- subPath:
+				case failover <- subPath:
+				}
 			} else {
 				if strings.Index(item.Name(), *pattern) >= 0 {
 					//subPath is repeated but no point in creating an allocation if not required
@@ -128,5 +136,27 @@ func search(pattern *string, in chan string, out chan string, cnt chan int) {
 		}
 		//We finished reading everything in the dir, tell the accounted we finished
 		cnt <- -1
+	}
+}
+
+func handleFailover(work, fail chan string) {
+	var q []string
+	for {
+		task := <-fail
+		q = append(q, task)
+		//TODO: Add verbose logging here so users can check if the failover was used
+		for {
+			select {
+			case work <- q[0]:
+				q = q[1:]
+			case task := <-fail:
+				q = append(q, task)
+			default:
+			}
+			//I don't know if we'll get an issue with `work <- q[0]` unless we have this
+			if len(q) == 0 {
+				break
+			}
+		}
 	}
 }
