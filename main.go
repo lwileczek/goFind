@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -20,12 +21,12 @@ var IGNORE_PATHS = [7]string{
 
 func main() {
 	//The number of workers. If there are more workers the system can read from
-	//the work queue more often and a larger queue is not required. It's a blance
-	workers := flag.Int("w", 8, "Number of workers")
+	//the work queue more often and a larger queue is not required.
+	workers := flag.Int("w", -1, "Number of workers")
 	//If this is reached the system could end up in deadlock
 	//The bigger the queue size the more memory is used
 	//Smaller could be faster but you coud have deadlock
-	queueSize := flag.Int("q", 2048, "The max work queue size")
+	queueSize := flag.Int("q", 512, "The max work queue size")
 	maxResults := flag.Int("c", -1, "The maximum number of results to find")
 	dir := flag.String("d", ".", "The starting directory to check for files")
 	pattern := flag.String("p", "", "A pattern to check for within the file names")
@@ -36,13 +37,18 @@ func main() {
 		return
 	}
 
+	w := *workers
+	if *workers <= 0 {
+		w = runtime.NumCPU() + 2
+	}
+
 	//Only for OSX/Linux, sorry windows
 	//Remove any trailing slashes in the path
 	if (*dir)[len(*dir)-1:] == "/" {
 		*dir = string((*dir)[0 : len(*dir)-1])
 	}
 
-	printCh := make(chan string, *workers)
+	printCh := make(chan string, w)
 	//The system will reach deadlock if the work queue reaches capacity
 	workQ := make(chan string, *queueSize)
 	//To avoid deadlock, send tasks here which will have a non-blocky retry
@@ -51,10 +57,12 @@ func main() {
 	dirCount := make(chan int)
 	//Track how many dirs are open and close the work queue when we hit zero
 	go dirChecker(dirCount, workQ)
-	defer close(dirCount)
-	defer close(failover)
+	//Not closing as goroutines will continue to try and write if we exit early
+	//with the -c flag but these should be fine and killed when the program exits
+	//defer close(dirCount)
+	//defer close(failover)
 	go handleFailover(workQ, failover)
-	go createWorkerPool(pattern, workQ, failover, printCh, dirCount, workers)
+	go createWorkerPool(pattern, workQ, failover, printCh, dirCount, w)
 
 	//Send first work request
 	workQ <- *dir
@@ -91,9 +99,9 @@ func dirChecker(in chan int, work chan string) {
 	}
 }
 
-func createWorkerPool(p *string, in chan string, failover chan string, results chan string, cnt chan int, w *int) {
+func createWorkerPool(p *string, in chan string, failover chan string, results chan string, cnt chan int, w int) {
 	var wg sync.WaitGroup
-	for i := 0; i < *w; i++ {
+	for i := 0; i < w; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

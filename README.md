@@ -24,12 +24,21 @@ If you're looking for something specific you can limit the number of responses
  - [ ] switch to ignore all hidden files/directories
  - [x] can we create a worker pool instead of the number of initial directories
  - [x] cap the number of returned responses, say 1 (quit after the first match!)
+ - [x] Auto-generate releases
  - [ ] cap the depth of the search
- - [ ] use select statement with a fallback queue to prevent deadlock from happening
+ - [x] use select statement with a fallback queue to prevent deadlock from happening
 
 ## Using
 ### Build
 build with `go build -o gf main.go` and run with `./gf -d <starting-path> -p <pattern-to-match-on>`
+#### Requirements
+ - Go 1.21+
+
+### Makefile
+You can use the [makefile](./Makefile) to build a production release with `make build`
+#### Requirements
+ - Make
+ - Go 1.21+
 
 ### Flags
 Customise your search with the following flags
