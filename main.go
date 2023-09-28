@@ -134,13 +134,14 @@ func search(pattern *string, in chan string, failover chan string, out chan stri
 				case in <- subPath:
 				case failover <- subPath:
 				}
-			} else {
-				if strings.Index(item.Name(), *pattern) >= 0 {
-					//subPath is repeated but no point in creating an allocation if not required
-					subPath := fmt.Sprintf("%s/%s", path, item.Name())
-					out <- subPath
-				}
 			}
+			//Always check if the name of the thing matches pattern, including directory names
+			if strings.Index(item.Name(), *pattern) >= 0 {
+				//subPath is repeated but no point in creating an allocation if not required
+				subPath := fmt.Sprintf("%s/%s", path, item.Name())
+				out <- subPath
+			}
+
 		}
 		//We finished reading everything in the dir, tell the accounted we finished
 		cnt <- -1
