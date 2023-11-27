@@ -19,18 +19,33 @@ var IGNORE_PATHS = [7]string{
 	"venv",
 }
 
+var (
+	version = "development"
+	commit  = "unknown"
+	date    = "2024-01-01"
+	builtBy = "lwileczek"
+)
+
+func printBuildInfo() {
+	fmt.Printf("Version: %s\nCommit: %s\nBuild Date: %s | by: %s\n", version, commit, date, builtBy)
+}
+
 func main() {
 	//The number of workers. If there are more workers the system can read from
 	//the work queue more often and a larger queue is not required.
 	workers := flag.Int("w", -1, "Number of workers")
-	//If this is reached the system could end up in deadlock
-	//The bigger the queue size the more memory is used
-	//Smaller could be faster but you coud have deadlock
+	//If the queue overflows we'll use a slice to store work which might slow the system
 	queueSize := flag.Int("q", 512, "The max work queue size")
 	maxResults := flag.Int("c", -1, "The maximum number of results to find")
 	dir := flag.String("d", ".", "The starting directory to check for files")
 	pattern := flag.String("p", "", "A pattern to check for within the file names")
+	v := flag.Bool("v", false, "print the version and build information")
 	flag.Parse()
+
+	if *v {
+		printBuildInfo()
+		return
+	}
 
 	if *pattern == "" {
 		fmt.Println("No pattern provided")
