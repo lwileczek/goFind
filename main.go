@@ -26,7 +26,7 @@ func printBuildInfo() {
 }
 
 func main() {
-	cfg := parseCLI()
+	cfg := parseArgs()
 	if cfg.Version {
 		printBuildInfo()
 		return
@@ -35,6 +35,10 @@ func main() {
 	if cfg.Pattern == "" {
 		fmt.Println("No pattern found, please provide a search pattern")
 		return
+	}
+
+	if cfg.Insensative {
+		fmt.Println("WARN: case insensative search is not yet supported")
 	}
 
 	printCh := make(chan string, cfg.Workers)
