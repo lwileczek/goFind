@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -86,21 +87,26 @@ func search(pattern string, in chan string, failover chan string, out chan strin
 	}
 }
 
+// handleFailover if the work queue is backed up, append the task to a slice
+// This helps to prevent deadlock since our works both read and write to the task
+// queue
 func handleFailover(work, fail chan string) {
-	var q []string
+	q := make([]string, 0, 64)
 	for {
 		task := <-fail
 		q = append(q, task)
-		//TODO: Add verbose logging here so users can check if the failover was used
+		slog.Debug("failover task added to queue", "queue length", len(q))
 		for {
 			select {
 			case work <- q[0]:
 				q = q[1:]
 			case task := <-fail:
 				q = append(q, task)
+				slog.Debug("failover task added to queue", "queue length", len(q))
 			default:
 			}
-			//I don't know if we'll get an issue with `work <- q[0]` unless we have this
+
+			// avoid indexing q in `work <- q[0]` if no elements to avoid panic
 			if len(q) == 0 {
 				break
 			}
