@@ -26,6 +26,9 @@ func showResults(ch chan string, limit *int) {
 	}
 }
 
+// dirChecker check how many directories are being searched
+// once the number of directories hits zero, then all files & dirs have been
+// checked and the program can be closed
 func dirChecker(in chan int, work chan string) {
 	n := 1
 	for i := range in {
@@ -37,6 +40,7 @@ func dirChecker(in chan int, work chan string) {
 	}
 }
 
+// createWorkerPool create all workers and close our results channel after they stop searching
 func createWorkerPool(p string, in chan string, failover chan string, results chan string, cnt chan int, w int) {
 	var wg sync.WaitGroup
 	for i := 0; i < w; i++ {
@@ -46,16 +50,17 @@ func createWorkerPool(p string, in chan string, failover chan string, results ch
 			search(p, in, failover, results, cnt)
 		}()
 	}
+
 	wg.Wait()
 	close(results)
 }
 
+// search looks through files and directories for a given substring
 func search(pattern string, in chan string, failover chan string, out chan string, cnt chan int) {
 	for path := range in {
 		items, err := os.ReadDir(path)
 		if err != nil {
-			fmt.Println("Error reading the directory", path)
-			fmt.Println(err)
+			slog.Error("failed to reading the directory", "path", path, "err", err)
 			cnt <- -1
 		}
 	ItemSearch:
@@ -74,6 +79,7 @@ func search(pattern string, in chan string, failover chan string, out chan strin
 				case failover <- subPath:
 				}
 			}
+
 			//Always check if the name of the thing matches pattern, including directory names
 			if strings.Contains(item.Name(), pattern) {
 				//subPath is repeated but no point in creating an allocation if not required

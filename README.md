@@ -4,6 +4,10 @@ A file finder written in Go.
 Uses a worker pool to search through directory trees quicker by taking advantage of multi-core machines.
 Go concurrency allows it to run on single core machines. 
 
+Each worker reads all of the items in a single directory.
+If one of the items is itself a directory, it's added to the work queue and
+another worker will begin searching that directory.
+
 ### Features
  - Concurrency search directories for desired pattern
  - Exit early with a max results option
